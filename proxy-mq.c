@@ -6,9 +6,9 @@
 #include "mq_common.h"
 
 /*
- * Función auxiliar interna: envía una petición al servidor y espera respuesta.
- * Devuelve 0 si la comunicación fue correcta, -2 si hubo error en las colas.
- */
+Función auxiliar interna: envía una petición al servidor y espera respuesta.
+Devuelve 0 si la comunicación fue correcta, -2 si hubo error en las colas.
+*/
 static int send_and_receive(request_t *req, response_t *resp)
 {
     /* Abrir la cola del servidor */
@@ -57,7 +57,7 @@ static int send_and_receive(request_t *req, response_t *resp)
     return 0;
 }
 
-/* ── Implementación de la API (lado cliente) ─────────────────────────────── */
+/* Implementación de la API (lado cliente) */
 
 int destroy(void)
 {

@@ -5,12 +5,12 @@ int main(int argc, char **argv)
 {
     int err;
 
-    /* ── 1. destroy: inicializar el servicio ─────────────────────────────── */
+    /* destroy: inicializar el servicio */
     printf("=== destroy ===\n");
     err = destroy();
     printf("destroy()          -> %d (esperado 0)\n\n", err);
 
-    /* ── 2. set_value: insertar tuplas válidas ───────────────────────────── */
+    /* set_value: insertar tuplas válidas */
     printf("=== set_value ===\n");
 
     char *key1  = "clave1";
@@ -39,14 +39,14 @@ int main(int argc, char **argv)
     err = set_value("clave_rango", "v1", 33, vec1, p1);
     printf("set_value N=33     -> %d (esperado -1)\n\n", err);
 
-    /* ── 3. exist ────────────────────────────────────────────────────────── */
+    /* exist */
     printf("=== exist ===\n");
     err = exist(key1);
     printf("exist clave1       -> %d (esperado 1)\n", err);
     err = exist("no_existe");
     printf("exist no_existe    -> %d (esperado 0)\n\n", err);
 
-    /* ── 4. get_value ────────────────────────────────────────────────────── */
+    /* get_value */
     printf("=== get_value ===\n");
 
     char   out_v1[256];
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
     err = get_value("no_existe", out_v1, &out_n, out_vec, &out_p);
     printf("get_value no_existe -> %d (esperado -1)\n\n", err);
 
-    /* ── 5. modify_value ─────────────────────────────────────────────────── */
+    /* modify_value */
     printf("=== modify_value ===\n");
 
     char *nuevo_v1 = "valor1_modificado";
@@ -96,7 +96,7 @@ int main(int argc, char **argv)
     err = modify_value(key1, nuevo_v1, 0, nuevo_vec, nuevo_p);
     printf("modify_value N=0   -> %d (esperado -1)\n\n", err);
 
-    /* ── 6. delete_key ───────────────────────────────────────────────────── */
+    /* delete_key */
     printf("=== delete_key ===\n");
 
     err = delete_key(key2);
@@ -107,7 +107,7 @@ int main(int argc, char **argv)
     err = delete_key("no_existe");
     printf("delete_key no_existe -> %d (esperado -1)\n\n", err);
 
-    /* ── 7. destroy: borrar todo ─────────────────────────────────────────── */
+    /* destroy: borrar todo */
     printf("=== destroy final ===\n");
     err = destroy();
     printf("destroy()          -> %d (esperado 0)\n", err);
