@@ -27,6 +27,7 @@ static int send_and_receive(request_t *req, response_t *resp)
     attr.mq_msgsize = sizeof(response_t);
     attr.mq_curmsgs = 0;
 
+    mq_unlink(req->client_queue); /* limpiar cola residual de ejecución anterior */
     mqd_t client_mq = mq_open(req->client_queue, O_CREAT | O_RDONLY, QUEUE_PERMS, &attr);
     if (client_mq == (mqd_t)-1) {
         perror("proxy: mq_open cliente");
