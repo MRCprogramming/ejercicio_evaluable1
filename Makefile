@@ -19,7 +19,7 @@ servidor_mq: servidor-mq.c libclaves.so
 	$(CC) -o servidor_mq servidor-mq.c -L. -lclaves $(RPATH) -lpthread -lrt
 
 app_cliente_mq: app-cliente.c libproxyclaves.so
-	$(CC) -o app_cliente_mq app-cliente.c -L. -lproxyclaves $(RPATH)
+	$(CC) -o app_cliente_mq app-cliente.c -L. -lproxyclaves $(RPATH) -lrt
 
 # Targets generales
 
