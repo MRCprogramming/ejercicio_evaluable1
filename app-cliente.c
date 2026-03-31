@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include "claves.h"
 
+// Programa cliente para probar toda funcíon
 int main(int argc, char **argv)
 {
-    int err;
+    int err; // guardar código de error (o no error)
 
     /* destroy: inicializar el servicio */
     printf("=== destroy ===\n");
@@ -29,17 +30,17 @@ int main(int argc, char **argv)
     err = set_value(key2, val1b, 2, vec2, p2);
     printf("set_value clave2   -> %d (esperado 0)\n", err);
 
-    /* clave duplicada: debe devolver -1 */
+    /* clave duplicada: -1 */
     err = set_value(key1, val1a, 3, vec1, p1);
     printf("set_value duplicada -> %d (esperado -1)\n", err);
 
-    /* N_value2 fuera de rango (0 y 33): deben devolver -1 */
+    /* N_value2 fuera de rango (0 y 33): -1 */
     err = set_value("clave_rango", "v1", 0, vec1, p1);
     printf("set_value N=0      -> %d (esperado -1)\n", err);
     err = set_value("clave_rango", "v1", 33, vec1, p1);
     printf("set_value N=33     -> %d (esperado -1)\n\n", err);
 
-    /* exist */
+    /* exist, 1: sí, 0: no*/
     printf("=== exist ===\n");
     err = exist(key1);
     printf("exist clave1       -> %d (esperado 1)\n", err);
@@ -48,11 +49,11 @@ int main(int argc, char **argv)
 
     /* get_value */
     printf("=== get_value ===\n");
-
-    char   out_v1[256];
-    int    out_n;
-    float  out_vec[32];
-    struct Paquete out_p;
+    // Con la key (parámetro 1), encontrar la tupla
+    char   out_v1[256]; // Parámetro 2: guardar valor1 de la tupla encontrada
+    int    out_n;       // Parámetro 3: guardar N_value2 de la tupla encontrada
+    float  out_vec[32]; // Parámetro 4: guardar V_value2 de la tupla encontrada
+    struct Paquete out_p; // Parámetro 5: guardar value3 de la tupla encontrada
 
     err = get_value(key1, out_v1, &out_n, out_vec, &out_p);
     printf("get_value clave1   -> %d (esperado 0)\n", err);
@@ -68,12 +69,13 @@ int main(int argc, char **argv)
     err = get_value("no_existe", out_v1, &out_n, out_vec, &out_p);
     printf("get_value no_existe -> %d (esperado -1)\n\n", err);
 
-    /* modify_value */
+    /* modify_value: cambiar valores de una tupla existente */
     printf("=== modify_value ===\n");
 
-    char *nuevo_v1 = "valor1_modificado";
-    float nuevo_vec[] = {9.9, 8.8, 7.7, 6.6};
-    struct Paquete nuevo_p = {100, 200, 300};
+    char *nuevo_v1 = "valor1_modificado"; // Parámetro 2: nuevo valor1
+    // Parámetro 3: nuevo N_value2 (número de elementos en el nuevo vector V_value2)
+    float nuevo_vec[] = {9.9, 8.8, 7.7, 6.6}; // Parámetro 4: nuevo vector V_value2 (N_value2=4)
+    struct Paquete nuevo_p = {100, 200, 300}; // Parámetro 5: nueva estructura Paquete
 
     err = modify_value(key1, nuevo_v1, 4, nuevo_vec, nuevo_p);
     printf("modify_value clave1 -> %d (esperado 0)\n", err);
