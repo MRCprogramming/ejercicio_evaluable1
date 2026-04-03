@@ -9,6 +9,7 @@
  * Cada hilo recibe un puntero a request_t (alocado en el hilo principal),
  * procesa la petición, envía la respuesta y libera la memoria.
  */
+
 void *handle_request(void *arg)
 {
     request_t  *req  = (request_t *)arg;
@@ -63,17 +64,22 @@ void *handle_request(void *arg)
 
 int main(void)
 {
-    /* Eliminar la cola por si quedó de una ejecución anterior */
+    /* Eliminar la cola por si quedaron colas de ejecución anterior 
+    Ejemplo: si servidor se cerró inesperadamente sin eliminar cola
+    Útil para evitar errores al crear cola (O_CREAT) */
     mq_unlink(SERVER_QUEUE);
 
+    // mq_attr es estructura que define los atributos de la cola
+    // Se pasa attr como argumento a mq_open para crear la cola
     struct mq_attr attr;
-    attr.mq_flags   = 0;
-    attr.mq_maxmsg  = 10;
-    attr.mq_msgsize = sizeof(request_t);
-    attr.mq_curmsgs = 0;
+    attr.mq_flags   = 0;                 // Modo bloqueante (0), si cola vacía, espera a nvo msj
+    attr.mq_maxmsg  = 10;                // Número máximo de mensajes en cola
+    attr.mq_msgsize = sizeof(request_t); // Tamaño máximo de cada mensaje (request_t)
+    attr.mq_curmsgs = 0;                 // Número actual de mensajes en cola (inicialmente 0)
 
+    // mqd_t server_mq es descriptor de la cola, para crearla con mq_open
     mqd_t server_mq = mq_open(SERVER_QUEUE, O_CREAT | O_RDONLY, QUEUE_PERMS, &attr);
-    if (server_mq == (mqd_t)-1) {
+    if (server_mq == (mqd_t)-1) { // Si server_mq == -1
         perror("servidor: mq_open");
         return 1;
     }
@@ -81,10 +87,12 @@ int main(void)
     printf("Servidor escuchando en %s...\n", SERVER_QUEUE);
 
     while (1) {
+        // Puntero a request_t (struct que contiene todo dato de una petición)
+        // malloc devuelve dir de memoria con espacio para un request_t
         request_t *req = malloc(sizeof(request_t));
-        if (req == NULL) {
+        if (req == NULL) { // No se pudo alocar memoria
             perror("servidor: malloc");
-            continue;
+            continue; // Salir del bucle
         }
 
         ssize_t bytes = mq_receive(server_mq, (char *)req, sizeof(request_t), NULL);
