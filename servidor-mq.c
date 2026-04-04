@@ -15,6 +15,11 @@ void *handle_request(void *arg)
     request_t  *req  = (request_t *)arg;
     response_t  resp = {0};
 
+    const char *op_names[] = {"UNKNOWN", "DESTROY", "SET_VALUE", "GET_VALUE", "MODIFY_VALUE", "DELETE_KEY", "EXIST"};
+    const char *op_name = (req->operation >= 1 && req->operation <= 6) ? op_names[req->operation] : "UNKNOWN";
+    printf("[HILO] Procesando operacion %d (%s) para clave '%s'\n", req->operation, op_name, req->key);
+    fflush(stdout);
+
     switch (req->operation) {
         case OP_DESTROY:
             resp.result = destroy();
@@ -85,22 +90,34 @@ int main(void)
     }
 
     printf("Servidor escuchando en %s...\n", SERVER_QUEUE);
+    fflush(stdout);
 
     while (1) {
+        printf("[SERVIDOR] Esperando peticion...\n");
+        fflush(stdout);
+
         // Puntero a request_t (struct que contiene todo dato de una petición)
         // malloc devuelve dir de memoria con espacio para un request_t
         request_t *req = malloc(sizeof(request_t));
         if (req == NULL) { // No se pudo alocar memoria
             perror("servidor: malloc");
+            printf("[SERVIDOR] ERROR: No se pudo alocar memoria\n");
+            fflush(stdout);
             continue; // Salir del bucle
         }
 
         ssize_t bytes = mq_receive(server_mq, (char *)req, sizeof(request_t), NULL);
         if (bytes == -1) {
             perror("servidor: mq_receive");
+            printf("[SERVIDOR] ERROR: No se recibio peticion\n");
+            fflush(stdout);
             free(req);
             continue;
         }
+
+        printf("[SERVIDOR] \u2713 Peticion recibida desde '%s' (%ld bytes)\n", req->client_queue, bytes);
+        printf("[SERVIDOR] Creando hilo para procesar peticion...\n");
+        fflush(stdout);
 
         /* Crear hilo desvinculado para atender la petición */
         pthread_t tid;
@@ -110,7 +127,12 @@ int main(void)
 
         if (pthread_create(&tid, &tattr, handle_request, req) != 0) {
             perror("servidor: pthread_create");
+            printf("[SERVIDOR] ERROR: No se pudo crear hilo\n");
+            fflush(stdout);
             free(req);
+        } else {
+            printf("[SERVIDOR] Hilo creado exitosamente (TID: %ld)\n\n", (long)tid);
+            fflush(stdout);
         }
         pthread_attr_destroy(&tattr);
     }
