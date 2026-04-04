@@ -103,7 +103,8 @@ int get_value(char *key, char *value1, int *N_value2, float *V_value2,
     if (send_and_receive(&req, &resp) == -2) return -2;
 
     if (resp.result == 0) {
-        strncpy(value1, resp.value1, 256);
+        strncpy(value1, resp.value1, 255);
+        value1[255] = '\0';
         *N_value2 = resp.N_value2;
         memcpy(V_value2, resp.V_value2, resp.N_value2 * sizeof(float));
         *value3 = resp.value3;

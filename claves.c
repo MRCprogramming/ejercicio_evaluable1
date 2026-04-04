@@ -68,8 +68,10 @@ int set_value(char *key, char *value1, int N_value2, float *V_value2, struct Paq
     }
 
     // copiar datos al nuevo nodo
-    strncpy(nuevo->key, key, 256);
-    strncpy(nuevo->value1, value1, 256);
+    strncpy(nuevo->key, key, 255);
+    nuevo->key[255] = '\0';
+    strncpy(nuevo->value1, value1, 255);
+    nuevo->value1[255] = '\0';
     nuevo->N_value2 = N_value2;
     
     nuevo->value2 = (float *)malloc(N_value2 * sizeof(float));
@@ -145,7 +147,8 @@ struct Paquete value3) {
             
             // Conectar nuevo vector, actualizar textos y números simples
             actual->value2 = nuevo_vector;
-            strncpy(actual->value1, value1, 256);
+            strncpy(actual->value1, value1, 255);
+            actual->value1[255] = '\0';
             actual->N_value2 = N_value2;
             actual->value3 = value3; 
             
