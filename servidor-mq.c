@@ -195,15 +195,15 @@ int main(void)
         char *copy = strdup(request_msg);
         char *token = strtok(copy, "|");
 
-        req->operation = atoi(token);                           /* operation */
+        req->operation = token ? atoi(token) : -1;              /* operation */
         token = strtok(NULL, "|");
-        strncpy(req->client_queue, token, 63);                  /* client_queue */
+        if (token) strncpy(req->client_queue, token, 63);       /* client_queue */
         token = strtok(NULL, "|");
-        strncpy(req->key, token, 255);                          /* key */
+        if (token) strncpy(req->key, token, 255);               /* key */
         token = strtok(NULL, "|");
-        strncpy(req->value1, token, 255);                       /* value1 */
+        if (token) strncpy(req->value1, token, 255);            /* value1 */
         token = strtok(NULL, "|");
-        req->N_value2 = atoi(token);                            /* N_value2 */
+        req->N_value2 = token ? atoi(token) : 0;                /* N_value2 */
         token = strtok(NULL, "|");
         if (token) {                                            /* floats */
             req->N_value2 = deserialize_floats(token, req->V_value2, 32);

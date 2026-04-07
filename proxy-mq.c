@@ -127,7 +127,6 @@ static int send_and_receive(int operation, const char *key, const char *value1,
 
     /* Parsear respuesta: result|value1|N_value2|float1,float2,...|x,y,z */
     int result;
-    char resp_paquete_str[64];
     
     char *copy = strdup(response_msg);
     char *token = strtok(copy, "|");
