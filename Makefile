@@ -54,11 +54,11 @@ app_cliente: app-cliente.c libclaves.so
 # PARTE B: versión distribuida con colas de mensajes POSIX
 
 # -lrt: -l link a biblioteca rt (real-time extensions) para funciones de colas de mensajes
-libproxyclaves.so: proxy-mq.c
-	$(CC) $(CFLAGS) -shared -o libproxyclaves.so proxy-mq.c -lrt
+libproxyclaves.so: proxy-mq.c mq_common.c
+	$(CC) $(CFLAGS) -shared -o libproxyclaves.so proxy-mq.c mq_common.c -lrt
 
-servidor_mq: servidor-mq.c libclaves.so
-	$(CC) -o servidor_mq servidor-mq.c -L. -lclaves $(RPATH) -lpthread -lrt
+servidor_mq: servidor-mq.c libclaves.so mq_common.c
+	$(CC) -o servidor_mq servidor-mq.c mq_common.c -L. -lclaves $(RPATH) -lpthread -lrt
 
 # app_cliente_mq no requiere -lrt, ya tiene de dependencia a libproxyclaves.so que ya la incluye
 app_cliente_mq: app-cliente.c libproxyclaves.so

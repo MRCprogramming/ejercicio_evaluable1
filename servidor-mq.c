@@ -5,63 +5,141 @@
 #include <pthread.h>
 #include "mq_common.h"
 
+/*
+Helper interno: deserializa floats de string "f1,f2,f3"
+*/
+static int deserialize_floats(char *input, float *floats, int max_count)
+{
+    int count = 0;
+    char *copy = strdup(input);
+    char *token = strtok(copy, ",");
+    
+    while (token && count < max_count) {
+        floats[count] = atof(token);
+        token = strtok(NULL, ",");
+        count++;
+    }
+    
+    free(copy);
+    return count;
+}
 
-// Cada hilo recibe un req, puntero a request_t (alocado en el hilo principal),
-// Procesa la petición, envía la respuesta y libera la memoria.
+/*
+Helper interno: serializa floats a string "f1,f2,f3"
+*/
+static void serialize_floats(float *floats, int count, char *output)
+{
+    output[0] = '\0';
+    for (int i = 0; i < count; i++) {
+        if (i > 0) strcat(output, ",");
+        char temp[32];
+        snprintf(temp, sizeof(temp), "%.6f", floats[i]);
+        strcat(output, temp);
+    }
+}
 
-void *handle_request(void *arg) // Función que cada hilo ejecuta para procesar su petición
-{   
-    // request_t *req para acceder a los datos de la petición, resp para preparar la respuesta
-    // (request_t *)arg: cast de arg a request_t*
-    request_t  *req  = (request_t *)arg; // para paramétro para handle_request
-    response_t  resp = {0}; // struct para respuesta
+/*
+Helper interno: deserializa Paquete de string "x,y,z"
+*/
+static struct Paquete deserialize_paquete(char *input)
+{
+    struct Paquete p = {0};
+    sscanf(input, "%d,%d,%d", &p.x, &p.y, &p.z);
+    return p;
+}
 
+/*
+Helper interno: serializa Paquete a string "x,y,z"
+*/
+static void serialize_paquete(struct Paquete p, char *output)
+{
+    snprintf(output, 64, "%d,%d,%d", p.x, p.y, p.z);
+}
+
+/*
+Estructura temporal para pasar los datos del request parseado al hilo
+*/
+typedef struct {
+    int operation;
+    char client_queue[64];
+    char key[256];
+    char value1[256];
+    int N_value2;
+    float V_value2[32];
+    struct Paquete value3;
+} request_data_t;
+
+// Cada hilo recibe los datos parseados de una petición, la procesa, 
+// y envía la respuesta serializada
+
+void *handle_request(void *arg)
+{
+    request_data_t *req = (request_data_t *)arg;
+    
     const char *op_names[] = {"UNKNOWN", "DESTROY", "SET_VALUE", "GET_VALUE", "MODIFY_VALUE", "DELETE_KEY", "EXIST"};
-    // Si op entre 1 y 6, op_name es el nombre de la operación, sino "UNKNOWN"
     const char *op_name = (req->operation >= 1 && req->operation <= 6) ? op_names[req->operation] : "UNKNOWN";
     printf("[HILO] Procesando operacion %d (%s) para clave '%s'\n", req->operation, op_name, req->key);
     fflush(stdout);
 
+    int result = -1;
+    char resp_value1[256] = "";
+    int resp_N_value2 = 0;
+    float resp_V_value2[32] = {0};
+    struct Paquete resp_value3 = {0};
+
     switch (req->operation) {
         case OP_DESTROY:
-            resp.result = destroy();
+            result = destroy();
             break;
 
         case OP_SET_VALUE:
-            resp.result = set_value(req->key, req->value1,
-                                    req->N_value2, req->V_value2, req->value3);
+            result = set_value(req->key, req->value1,
+                              req->N_value2, req->V_value2, req->value3);
             break;
 
         case OP_GET_VALUE:
-            resp.result = get_value(req->key, resp.value1,
-                                    &resp.N_value2, resp.V_value2, &resp.value3);
+            result = get_value(req->key, resp_value1,
+                              &resp_N_value2, resp_V_value2, &resp_value3);
             break;
 
         case OP_MODIFY_VALUE:
-            resp.result = modify_value(req->key, req->value1,
-                                       req->N_value2, req->V_value2, req->value3);
+            result = modify_value(req->key, req->value1,
+                                 req->N_value2, req->V_value2, req->value3);
             break;
 
         case OP_DELETE_KEY:
-            resp.result = delete_key(req->key);
+            result = delete_key(req->key);
             break;
 
         case OP_EXIST:
-            resp.result = exist(req->key);
+            result = exist(req->key);
             break;
 
         default:
-            resp.result = -1;
+            result = -1;
             break;
     }
 
-    // Enviar respuesta a la cola del cliente
-    mqd_t client_mq = mq_open(req->client_queue, O_WRONLY);  // Abrir cola del cliente para escribir respuesta
-    if (client_mq == (mqd_t)-1) { // convierte -1 a mqd_t (if client_mq == -1)
+    /* Serializar respuesta: result|value1|N_value2|float1,float2,...|x,y,z */
+    char floats_str[512] = "";
+    char paquete_str[64];
+    
+    serialize_floats(resp_V_value2, resp_N_value2, floats_str);
+    serialize_paquete(resp_value3, paquete_str);
+    
+    char response_msg[MAX_MESSAGE_SIZE];
+    snprintf(response_msg, MAX_MESSAGE_SIZE, "%d|%s|%d|%s|%s",
+             result, resp_value1, resp_N_value2, floats_str, paquete_str);
+    
+    int msg_len = strlen(response_msg) + 1;
+
+    /* Enviar respuesta a la cola del cliente */
+    mqd_t client_mq = mq_open(req->client_queue, O_WRONLY);
+    if (client_mq == (mqd_t)-1) {
         perror("servidor: mq_open cliente");
-    } else { // enviar respuesta a cliente
-        if (mq_send(client_mq, (char *)&resp, sizeof(response_t), 0) == -1)
-            perror("servidor: mq_send"); //  si falla, imprimir error
+    } else {
+        if (sendMessage(client_mq, response_msg, msg_len) == -1)
+            perror("servidor: sendMessage");
         mq_close(client_mq);
     }
 
@@ -69,24 +147,19 @@ void *handle_request(void *arg) // Función que cada hilo ejecuta para procesar 
     return NULL;
 }
 
-int main(void) // Comienza ejecución del servidor (programa que actúa como servidor)
+int main(void)
 {
-    // Eliminar la cola por si quedaron colas de ejecución anterior 
-    // Ejemplo: si servidor se cerró inesperadamente sin eliminar cola
-    // Útil para evitar errores al crear cola (O_CREAT)
+    /* Eliminar la cola por si quedaron colas de ejecución anterior */
     mq_unlink(SERVER_QUEUE);
 
-    // mq_attr es estructura que define los atributos de la cola
-    // Se pasa attr como argumento a mq_open para crear la cola
     struct mq_attr attr;
-    attr.mq_flags   = 0;                 // Modo bloqueante (0), si cola vacía, espera a nvo msj
-    attr.mq_maxmsg  = 10;                // Número máximo de mensajes en cola
-    attr.mq_msgsize = sizeof(request_t); // Tamaño máximo de cada mensaje (request_t)
-    attr.mq_curmsgs = 0;                 // Número actual de mensajes en cola (inicialmente 0)
+    attr.mq_flags   = 0;                 /* Modo bloqueante */
+    attr.mq_maxmsg  = 10;                /* Número máximo de mensajes en cola */
+    attr.mq_msgsize = MAX_MESSAGE_SIZE;  /* Tamaño máximo de cada mensaje */
+    attr.mq_curmsgs = 0;                 /* Número actual de mensajes */
 
-    // mqd_t server_mq es descriptor de la cola, para crearla con mq_open
     mqd_t server_mq = mq_open(SERVER_QUEUE, O_CREAT | O_RDONLY, QUEUE_PERMS, &attr);
-    if (server_mq == (mqd_t)-1) { // convierte -1 a mqd_t (if server_mq == -1)
+    if (server_mq == (mqd_t)-1) {
         perror("servidor: mq_open");
         return 1;
     }
@@ -94,66 +167,76 @@ int main(void) // Comienza ejecución del servidor (programa que actúa como ser
     printf("Servidor escuchando en %s...\n", SERVER_QUEUE);
     fflush(stdout);
 
-    while (1) { // Hasta Ctrl+C
+    while (1) {
         printf("[SERVIDOR] Esperando peticion...\n");
-        fflush(stdout); // fflush(stdout) imprime mensaje inmediatamente sin esperar a llenar buffer
-                        // stdout: buffer de salida estándar, printf escribe en stdout
-    
-        // request_t (struct que contiene datos de una petición)
-        // malloc devuelve dir de memoria con espacio para un request_t
-        request_t *req = malloc(sizeof(request_t)); // req: puntero a struct request_t, para recibir msj de cola
-        if (req == NULL) { // No se pudo encontrar espacio para request_t
-            perror("servidor: malloc");
-            printf("[SERVIDOR] ERROR: No se pudo alocar memoria\n");
-            fflush(stdout);
-            continue; // Salir del bucle
-        }
+        fflush(stdout);
 
-        // mq_receive intenta recibir mensaje de la cola server_mq, lo guarda en req
-        // Devuelve bytes recibidos o -1 si error
-        ssize_t bytes = mq_receive(server_mq, (char *)req, sizeof(request_t), NULL);
-        if (bytes == -1) { // Si no se pudo recibir mensaje (mq_receive devuelve -1)
-            perror("servidor: mq_receive");
+        /* Recibir petición serializada */
+        char request_msg[MAX_MESSAGE_SIZE] = {0};
+        if (recvMessage(server_mq, request_msg, MAX_MESSAGE_SIZE) == -1) {
+            perror("servidor: recvMessage");
             printf("[SERVIDOR] ERROR: No se recibio peticion\n");
             fflush(stdout);
-            free(req); // se limpia memoria alocada para req, evitar espacio alocado sin usar (memory leak)
             continue;
         }
 
-        // \u2713 es ✓ (queda bonito)
-        printf("[SERVIDOR] \u2713 Peticion recibida desde '%s' (%ld bytes)\n", req->client_queue, bytes);
+        printf("[SERVIDOR] ✓ Peticion recibida (%zu bytes)\n", strlen(request_msg));
+        fflush(stdout);
+
+        /* Parsear petición: operation|client_queue|key|value1|N_value2|float1,float2,...|x,y,z */
+        request_data_t *req = malloc(sizeof(request_data_t));
+        if (req == NULL) {
+            perror("servidor: malloc");
+            printf("[SERVIDOR] ERROR: No se pudo alocar memoria\n");
+            fflush(stdout);
+            continue;
+        }
+
+        char *copy = strdup(request_msg);
+        char *token = strtok(copy, "|");
+
+        req->operation = atoi(token);                           /* operation */
+        token = strtok(NULL, "|");
+        strncpy(req->client_queue, token, 63);                  /* client_queue */
+        token = strtok(NULL, "|");
+        strncpy(req->key, token, 255);                          /* key */
+        token = strtok(NULL, "|");
+        strncpy(req->value1, token, 255);                       /* value1 */
+        token = strtok(NULL, "|");
+        req->N_value2 = atoi(token);                            /* N_value2 */
+        token = strtok(NULL, "|");
+        if (token) {                                            /* floats */
+            req->N_value2 = deserialize_floats(token, req->V_value2, 32);
+        }
+        token = strtok(NULL, "|");
+        if (token) {                                            /* Paquete */
+            req->value3 = deserialize_paquete(token);
+        }
+
+        free(copy);
+
         printf("[SERVIDOR] Creando hilo para procesar peticion...\n");
         fflush(stdout);
 
-        
-        // Crear hilo desvinculado para atender petición
-        // Cada hilo desvinculado creado procesa, responde una petición, luego se destruye
-        pthread_t tid;             // pthread_t es tipo de dato para identificador de hilo
-        pthread_attr_t tattr;      // pthread_attr_t es tipo de dato para atributos del hilo
-        pthread_attr_init(&tattr); // Inicializar atributos del hilo
-        
-        // Declarar estado desvinculación
-        // Destrucción automática al terminar handle_request
+        /* Crear hilo desvinculado */
+        pthread_t tid;
+        pthread_attr_t tattr;
+        pthread_attr_init(&tattr);
         pthread_attr_setdetachstate(&tattr, PTHREAD_CREATE_DETACHED);
 
-        // AQUÍ se CREA el hilo
-        if (pthread_create(&tid,           // identificador hilo a usar
-                           &tattr,         // atributos del hilo a usar (desvinculado)
-                           handle_request, // funcion a ejecutar por el hilo
-                           req) != 0) {    // req: el parámetro que usa handle_request
+        if (pthread_create(&tid, &tattr, handle_request, req) != 0) {
             perror("servidor: pthread_create");
             printf("[SERVIDOR] ERROR: No se pudo crear hilo\n");
             fflush(stdout);
-            free(req); // if (1) -> Fallo al crear hilo
-        } else { // Éxito al crear hilo
+            free(req);
+        } else {
             printf("[SERVIDOR] Hilo creado exitosamente (TID: %ld)\n\n", (long)tid);
             fflush(stdout);
         }
-        pthread_attr_destroy(&tattr); // Borrar atributos, ya no necesitados
+        pthread_attr_destroy(&tattr);
     }
 
-    // YA NO SIRVE PARA NADA, PERO no lo quito porque me da miedo fastidiar algo (¿y si sí sirve?)
-    mq_close(server_mq);     // Cerrar la cola de mensajes del servidor
-    mq_unlink(SERVER_QUEUE); // Eliminar la cola de mensajes del servidor
+    mq_close(server_mq);
+    mq_unlink(SERVER_QUEUE);
     return 0;
 }
