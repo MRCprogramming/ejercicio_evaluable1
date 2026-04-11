@@ -17,7 +17,7 @@ int main(int argc, char **argv)
     char *key1  = "clave1";
     char *val1a = "valor1_de_clave1";
     float vec1[] = {1.0, 2.0, 3.0};
-    struct Paquete p1 = {10, 20, 30};
+    struct Paquete p1 = {10, 20, 30}; // estructura con 3 enteros (vector)
 
     err = set_value(key1, val1a, 3, vec1, p1);
     printf("set_value clave1   -> %d (esperado 0)\n", err);
@@ -25,7 +25,7 @@ int main(int argc, char **argv)
     char *key2  = "clave2";
     char *val1b = "valor1_de_clave2";
     float vec2[] = {4.5, 5.5};
-    struct Paquete p2 = {1, 2, 3};
+    struct Paquete p2 = {1, 2, 3}; // estructura con 3 enteros (vector)
 
     err = set_value(key2, val1b, 2, vec2, p2);
     printf("set_value clave2   -> %d (esperado 0)\n", err);
@@ -50,10 +50,10 @@ int main(int argc, char **argv)
     /* get_value */
     printf("=== get_value ===\n");
     // Con la key (parámetro 1), encontrar la tupla
-    char   out_v1[256]; // Parámetro 2: guardar valor1 de la tupla encontrada
-    int    out_n;       // Parámetro 3: guardar N_value2 de la tupla encontrada
-    float  out_vec[32]; // Parámetro 4: guardar V_value2 de la tupla encontrada
-    struct Paquete out_p; // Parámetro 5: guardar value3 de la tupla encontrada
+    char   out_v1[256]; // Parámetro 2: guardar en él (valor1) la tupla encontrada
+    int    out_n;       // Parámetro 3: guardar en él (N_value2) la tupla encontrada
+    float  out_vec[32]; // Parámetro 4: guardar en él (V_value2) la tupla encontrada
+    struct Paquete out_p; // Parámetro 5: guardar en él (value3) la tupla encontrada
 
     err = get_value(key1, out_v1, &out_n, out_vec, &out_p);
     printf("get_value clave1   -> %d (esperado 0)\n", err);

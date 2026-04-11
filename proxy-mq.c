@@ -5,32 +5,35 @@
 #include <unistd.h>
 #include "mq_common.h"
 
-/*
-Helper interno: serializa floats a string "f1,f2,f3"
-*/
+// proxy-mq.c aporta funciones para que el cliente se comunique con el server (colas mensajes).
+
+// Helper interno: serializa floats a string "f1,f2,f3"
+// static: func privada (no se comparte ni con #include s), nadie más la requiere
+// convertidor array de floats a string para enviar por mensaje
 static void serialize_floats(float *floats, int count, char *output)
 {
-    output[0] = '\0';
+    output[0] = '\0'; // inicializa string vacía
     for (int i = 0; i < count; i++) {
-        if (i > 0) strcat(output, ",");
-        char temp[32];
+        if (i > 0) strcat(output, ","); // si no es el primer float, añade coma
+        char temp[32]; // buffer temporal para convertir float a string
+        // imprime float convertido a string (6 decimales)
         snprintf(temp, sizeof(temp), "%.6f", floats[i]);
-        strcat(output, temp);
+        strcat(output, temp); // añadir float convertido al output
+        // se añade coma antes de cada float excepto el primero, así no hay coma al final
     }
 }
 
-/*
-Helper interno: deserializa floats de string "f1,f2,f3"
-*/
+
+// Helper interno: deserializa floats de string "f1,f2,f3"
 static int deserialize_floats(char *input, float *floats, int max_count)
 {
     int count = 0;
-    char *copy = strdup(input);
-    char *token = strtok(copy, ",");
+    char *copy = strdup(input); // dir con copia de input
+    char *token = strtok(copy, ","); // partir string según comas, puntero a 1er token
     
     while (token && count < max_count) {
-        floats[count] = atof(token);
-        token = strtok(NULL, ",");
+        floats[count] = atof(token); // ASCII to float
+        token = strtok(NULL, ","); // obtener siguiente token
         count++;
     }
     
@@ -38,17 +41,13 @@ static int deserialize_floats(char *input, float *floats, int max_count)
     return count;
 }
 
-/*
-Helper interno: serializa Paquete a string "x,y,z"
-*/
+// Helper interno: serializa Paquete a string "x,y,z"
 static void serialize_paquete(struct Paquete p, char *output)
 {
     snprintf(output, 64, "%d,%d,%d", p.x, p.y, p.z);
 }
 
-/*
-Helper interno: deserializa Paquete de string "x,y,z"
-*/
+// Helper interno: deserializa Paquete de string "x,y,z"
 static struct Paquete deserialize_paquete(char *input)
 {
     struct Paquete p = {0};
@@ -56,18 +55,24 @@ static struct Paquete deserialize_paquete(char *input)
     return p;
 }
 
-/*
-Función auxiliar interna: envía una petición al servidor y espera respuesta.
-Formato petición:  operation|client_queue|key|value1|N_value2|float1,float2,...|x,y,z
-Formato respuesta: result|value1|N_value2|float1,float2,...|x,y,z
-Devuelve 0 si la comunicación fue correcta, -2 si hubo error en las colas.
-*/
-static int send_and_receive(int operation, const char *key, const char *value1, 
-                            int N_value2, float *V_value2, struct Paquete value3,
-                            char *resp_value1, int *resp_N_value2, float *resp_V_value2, 
-                            struct Paquete *resp_value3)
+
+// Función auxiliar interna: envía una petición al servidor y espera respuesta.
+// Formato petición:  operation|client_queue|key|value1|N_value2|float1,float2,...|x,y,z
+// Formato respuesta: result|value1|N_value2|float1,float2,...|x,y,z
+// Devuelve 0 si la comunicación fue correcta, -2 si hubo error en las colas.
+
+static int send_and_receive(int operation,               // operación a realizar (ej: OP_SET_VALUE)
+                            const char *key,             // clave para la operación (1, ..., 6)
+                            const char *value1,          // value1 para set/modify
+                            int N_value2,                // cantidad de floats en value2 para set/modify
+                            float *V_value2,             // vector de floats para set/modify
+                            struct Paquete value3,       // value3 para set/modify
+                            char *resp_value1,           // buffer para recibir value1 para get_value
+                            int *resp_N_value2,          // puntero para recibir N_value2 para get_value
+                            float *resp_V_value2,        // buffer para recibir vector de floats para get_value
+                            struct Paquete *resp_value3) // puntero para recibir value3 para get_value
 {
-    /* Crear la cola de respuesta del cliente usando el PID del proceso */
+    // Crear la cola de respuesta del cliente usando el PID del proceso
     char client_queue[64];
     snprintf(client_queue, sizeof(client_queue), "/cliente_%d", getpid());
 
@@ -77,14 +82,14 @@ static int send_and_receive(int operation, const char *key, const char *value1,
     attr.mq_msgsize = MAX_MESSAGE_SIZE;
     attr.mq_curmsgs = 0;
 
-    mq_unlink(client_queue); /* limpiar cola residual de ejecución anterior */
+    mq_unlink(client_queue); // limpiar cola residual de ejecución anterior
     mqd_t client_mq = mq_open(client_queue, O_CREAT | O_RDONLY, QUEUE_PERMS, &attr);
     if (client_mq == (mqd_t)-1) {
         perror("proxy: mq_open cliente");
         return -2;
     }
 
-    /* Abrir la cola del servidor */
+    // Abrir la cola del servidor
     mqd_t server_mq = mq_open(SERVER_QUEUE, O_WRONLY);
     if (server_mq == (mqd_t)-1) {
         perror("proxy: mq_open servidor");
@@ -93,7 +98,7 @@ static int send_and_receive(int operation, const char *key, const char *value1,
         return -2;
     }
 
-    /* Serializar petición */
+    // Serializar petición
     char request_msg[MAX_MESSAGE_SIZE];
     char floats_str[512] = "";
     char paquete_str[64];
@@ -104,9 +109,9 @@ static int send_and_receive(int operation, const char *key, const char *value1,
     snprintf(request_msg, MAX_MESSAGE_SIZE, "%d|%s|%s|%s|%d|%s|%s",
              operation, client_queue, key, value1, N_value2, floats_str, paquete_str);
     
-    int msg_len = strlen(request_msg) + 1;  /* +1 para el \0 */
+    int msg_len = strlen(request_msg) + 1;  // +1 para el \0
 
-    /* Enviar petición al servidor */
+    // Enviar petición al servidor
     if (sendMessage(server_mq, request_msg, msg_len) == -1) {
         perror("proxy: sendMessage");
         mq_close(server_mq);
@@ -116,7 +121,7 @@ static int send_and_receive(int operation, const char *key, const char *value1,
     }
     mq_close(server_mq);
 
-    /* Recibir respuesta del servidor */
+    // Recibir respuesta del servidor
     char response_msg[MAX_MESSAGE_SIZE] = {0};
     if (recvMessage(client_mq, response_msg, MAX_MESSAGE_SIZE) == -1) {
         perror("proxy: recvMessage");
@@ -125,23 +130,23 @@ static int send_and_receive(int operation, const char *key, const char *value1,
         return -2;
     }
 
-    /* Parsear respuesta: result|value1|N_value2|float1,float2,...|x,y,z */
+    // Parsear respuesta: result|value1|N_value2|float1,float2,...|x,y,z
     int result;
     
     char *copy = strdup(response_msg);
     char *token = strtok(copy, "|");
     
-    result = atoi(token);                                   /* result */
+    result = atoi(token);
     token = strtok(NULL, "|");
-    if (token && resp_value1) strncpy(resp_value1, token, 255); /* value1 */
+    if (token && resp_value1) strncpy(resp_value1, token, 255); // value1
     token = strtok(NULL, "|");
-    if (resp_N_value2) *resp_N_value2 = atoi(token);        /* N_value2 */
+    if (resp_N_value2) *resp_N_value2 = atoi(token);        // N_value2
     token = strtok(NULL, "|");
-    if (token && resp_V_value2) {                             /* floats */
+    if (token && resp_V_value2) {                             // floats
         *resp_N_value2 = deserialize_floats(token, resp_V_value2, 32);
     }
     token = strtok(NULL, "|");
-    if (token && resp_value3) {                              /* Paquete */
+    if (token && resp_value3) {                              // Paquete
         *resp_value3 = deserialize_paquete(token);
     }
     
@@ -153,7 +158,7 @@ static int send_and_receive(int operation, const char *key, const char *value1,
 }
 
 
-/* Implementación de la API (lado cliente) */
+// Implementación de la API (lado cliente) (send_and_receive)
 
 int destroy(void)
 {

@@ -5,9 +5,8 @@
 #include <pthread.h>
 #include "mq_common.h"
 
-/*
-Helper interno: deserializa floats de string "f1,f2,f3"
-*/
+// Helper interno: deserializa floats de string "f1,f2,f3"
+// igual que en proxy-mq.c, lo podría haber metido en mq_common.c
 static int deserialize_floats(char *input, float *floats, int max_count)
 {
     int count = 0;
@@ -24,9 +23,7 @@ static int deserialize_floats(char *input, float *floats, int max_count)
     return count;
 }
 
-/*
-Helper interno: serializa floats a string "f1,f2,f3"
-*/
+// Helper interno: serializa floats a string "f1,f2,f3"
 static void serialize_floats(float *floats, int count, char *output)
 {
     output[0] = '\0';
@@ -38,9 +35,7 @@ static void serialize_floats(float *floats, int count, char *output)
     }
 }
 
-/*
-Helper interno: deserializa Paquete de string "x,y,z"
-*/
+// Helper interno: deserializa Paquete de string "x,y,z"
 static struct Paquete deserialize_paquete(char *input)
 {
     struct Paquete p = {0};
@@ -48,17 +43,15 @@ static struct Paquete deserialize_paquete(char *input)
     return p;
 }
 
-/*
-Helper interno: serializa Paquete a string "x,y,z"
-*/
+// Helper interno: serializa Paquete a string "x,y,z"
 static void serialize_paquete(struct Paquete p, char *output)
 {
     snprintf(output, 64, "%d,%d,%d", p.x, p.y, p.z);
 }
 
-/*
-Estructura temporal para pasar los datos del request parseado al hilo
-*/
+// Estructura temporal para pasar los datos del request parseado al hilo
+// Útil porque handle_request recibe un solo void* como parámetro
+// Para así meter dir de la struct, y poder acceder a todo campo 
 typedef struct {
     int operation;
     char client_queue[64];
@@ -69,12 +62,12 @@ typedef struct {
     struct Paquete value3;
 } request_data_t;
 
-// Cada hilo recibe los datos parseados de una petición, la procesa, 
+// Cada hilo recibe los datos parseados de una petición, la procesa,
 // y envía la respuesta serializada
 
 void *handle_request(void *arg)
-{
-    request_data_t *req = (request_data_t *)arg;
+{   // arg se convierte puntero a request_data_t con los datos sacados de la petición
+    request_data_t *req = (request_data_t *)arg; // en req guardamos los datos sacados de la petición
     
     const char *op_names[] = {"UNKNOWN", "DESTROY", "SET_VALUE", "GET_VALUE", "MODIFY_VALUE", "DELETE_KEY", "EXIST"};
     const char *op_name = (req->operation >= 1 && req->operation <= 6) ? op_names[req->operation] : "UNKNOWN";
@@ -120,7 +113,7 @@ void *handle_request(void *arg)
             break;
     }
 
-    /* Serializar respuesta: result|value1|N_value2|float1,float2,...|x,y,z */
+    // Serializar respuesta: result|value1|N_value2|float1,float2,...|x,y,z
     char floats_str[512] = "";
     char paquete_str[64];
     
@@ -133,7 +126,7 @@ void *handle_request(void *arg)
     
     int msg_len = strlen(response_msg) + 1;
 
-    /* Enviar respuesta a la cola del cliente */
+    // Enviar respuesta a la cola del cliente
     mqd_t client_mq = mq_open(req->client_queue, O_WRONLY);
     if (client_mq == (mqd_t)-1) {
         perror("servidor: mq_open cliente");
@@ -149,15 +142,16 @@ void *handle_request(void *arg)
 
 int main(void)
 {
-    /* Eliminar la cola por si quedaron colas de ejecución anterior */
+    // Eliminar la cola por si quedaron colas de ejecución anterior
     mq_unlink(SERVER_QUEUE);
 
-    struct mq_attr attr;
-    attr.mq_flags   = 0;                 /* Modo bloqueante */
-    attr.mq_maxmsg  = 10;                /* Número máximo de mensajes en cola */
-    attr.mq_msgsize = MAX_MESSAGE_SIZE;  /* Tamaño máximo de cada mensaje */
-    attr.mq_curmsgs = 0;                 /* Número actual de mensajes */
+    struct mq_attr attr;                 // Struct atributos cola
+    attr.mq_flags   = 0;                 // Modo bloqueante
+    attr.mq_maxmsg  = 10;                // Número máximo de mensajes en cola
+    attr.mq_msgsize = MAX_MESSAGE_SIZE;  // Tamaño máximo de cada mensaje
+    attr.mq_curmsgs = 0;                 // Número actual de mensajes
 
+    // Crear la cola del servidor
     mqd_t server_mq = mq_open(SERVER_QUEUE, O_CREAT | O_RDONLY, QUEUE_PERMS, &attr);
     if (server_mq == (mqd_t)-1) {
         perror("servidor: mq_open");
@@ -165,14 +159,15 @@ int main(void)
     }
 
     printf("Servidor escuchando en %s...\n", SERVER_QUEUE);
-    fflush(stdout);
+    fflush(stdout); // Que el mensjae se imprima inmediatamente
 
     while (1) {
         printf("[SERVIDOR] Esperando peticion...\n");
         fflush(stdout);
 
-        /* Recibir petición serializada */
-        char request_msg[MAX_MESSAGE_SIZE] = {0};
+        // Recibir petición serializada
+        char request_msg[MAX_MESSAGE_SIZE] = {0}; // buffer para recibir la petición
+        // si error
         if (recvMessage(server_mq, request_msg, MAX_MESSAGE_SIZE) == -1) {
             perror("servidor: recvMessage");
             printf("[SERVIDOR] ERROR: No se recibio peticion\n");
@@ -183,33 +178,39 @@ int main(void)
         printf("[SERVIDOR] ✓ Peticion recibida (%zu bytes)\n", strlen(request_msg));
         fflush(stdout);
 
-        /* Parsear petición: operation|client_queue|key|value1|N_value2|float1,float2,...|x,y,z */
+        // Parsear petición: operation|client_queue|key|value1|N_value2|float1,float2,...|x,y,z
         request_data_t *req = malloc(sizeof(request_data_t));
-        if (req == NULL) {
+        if (req == NULL) { // si no se halló memoria para el request
             perror("servidor: malloc");
             printf("[SERVIDOR] ERROR: No se pudo alocar memoria\n");
             fflush(stdout);
             continue;
         }
 
-        char *copy = strdup(request_msg);
-        char *token = strtok(copy, "|");
+        char *copy = strdup(request_msg); // copia de request_msg
+        char *token = strtok(copy, "|");  // dividir en tokens según '|'
+                                          // token apunta al primer token (operation)
 
-        req->operation = token ? atoi(token) : -1;              /* operation */
-        token = strtok(NULL, "|");
-        if (token) strncpy(req->client_queue, token, 63);       /* client_queue */
-        token = strtok(NULL, "|");
-        if (token) strncpy(req->key, token, 255);               /* key */
-        token = strtok(NULL, "|");
-        if (token) strncpy(req->value1, token, 255);            /* value1 */
-        token = strtok(NULL, "|");
-        req->N_value2 = token ? atoi(token) : 0;                /* N_value2 */
-        token = strtok(NULL, "|");
-        if (token) {                                            /* floats */
-            req->N_value2 = deserialize_floats(token, req->V_value2, 32);
-        }
-        token = strtok(NULL, "|");
-        if (token) {                                            /* Paquete */
+// Convertir cada token a su campo correspondiente en req
+//atoi(...): ASCII to int
+req->operation = token ? atoi(token) : -1;                  // operation
+    token = strtok(NULL, "|"); // 1er param: proseguir con el siguiente token
+                               // 2o param: delimitador ('|')
+    if (token) strncpy(req->client_queue, token, 63); // 1er param: dónde guardar // client_queue
+                                                      // 2o param: qué copiar
+                                                      // 3er param: tamaño máximo a copiar
+    token = strtok(NULL, "|");
+    if (token) strncpy(req->key, token, 255);               // key
+    token = strtok(NULL, "|");
+    if (token) strncpy(req->value1, token, 255);            // value1
+    token = strtok(NULL, "|");
+    req->N_value2 = token ? atoi(token) : 0;                // N_value2
+    token = strtok(NULL, "|");
+    if (token) {                                            // floats
+        req->N_value2 = deserialize_floats(token, req->V_value2, 32);
+    }
+    token = strtok(NULL, "|");
+    if (token) {                                            // Paquete
             req->value3 = deserialize_paquete(token);
         }
 
@@ -218,7 +219,7 @@ int main(void)
         printf("[SERVIDOR] Creando hilo para procesar peticion...\n");
         fflush(stdout);
 
-        /* Crear hilo desvinculado */
+        // Crear hilo desvinculado
         pthread_t tid;
         pthread_attr_t tattr;
         pthread_attr_init(&tattr);

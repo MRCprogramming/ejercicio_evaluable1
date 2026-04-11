@@ -9,9 +9,10 @@ struct claves {
     int N_value2; // longitud del vector value2
     float *value2;
     struct Paquete value3;
-    // crear lista enlazada (tal que no haya límte de almacenamiento)
+    // crear LISTA ENLAZADA (tal que no haya límte de almacenamiento)
     // puntero a la siguiente clave/tupla
-    struct claves *siguiente;
+    // [ node1 ] --- .next ---> [ node2 ] --- .next ---> NULL (fin de la lista)
+    struct claves *siguiente; // = NULL;
 };
 
 // declarar head de la lista enlazada
@@ -23,8 +24,8 @@ pthread_mutex_t candado = PTHREAD_MUTEX_INITIALIZER;
 
 // FUNCIONES
 int destroy(void) {
-    pthread_mutex_lock(&candado);
-    struct claves *actual = head; // comenzar en head
+    pthread_mutex_lock(&candado); // sólo este hilo actúa ahora
+    struct claves *actual = head; // nombrar el nodo actual como el head
     while (actual != NULL) { // recorrer toda la lista
         struct claves *temporal = actual; // guardar el nodo actual
         
@@ -52,22 +53,25 @@ int set_value(char *key, char *value1, int N_value2, float *V_value2, struct Paq
     
     // buscar si la clave ya existe
     struct claves *actual = head;
-    while (actual != NULL) {
+    while (actual != NULL) {                 // mirar todo nodo
+        // string compare, 0 si son iguales
         if (strcmp(actual->key, key) == 0) { // clave encontrada
             pthread_mutex_unlock(&candado);
-            return -1; // error: clave ya existe
+            return -1;                       // error: clave ya existe
         }
         actual = actual->siguiente;
     }
 
-    // crear nuevo nodo para la nueva clave
+    // Crear nuevo nodo para la nueva clave
+    // crear puntero a nodo, se le asigna puntero a mem reservada, convertida a tipo struct claves
     struct claves *nuevo = (struct claves *)malloc(sizeof(struct claves));
     if (nuevo == NULL) {
         pthread_mutex_unlock(&candado);
         return -1; // error: fallo en malloc
     }
 
-    // copiar datos al nuevo nodo
+    // Copiar datos al nuevo nodo
+    // 1er param: donde copiar, 2do param: qué copiar, 3ro: tam máx copiar (evitar overflow)
     strncpy(nuevo->key, key, 255);
     nuevo->key[255] = '\0';
     strncpy(nuevo->value1, value1, 255);
@@ -95,6 +99,7 @@ int set_value(char *key, char *value1, int N_value2, float *V_value2, struct Paq
     return 0; // éxito
 }
 
+// Guarda los valores sacados en los parámetros, tal que luego los puedas acceder
 int get_value(char *key, char *value1, int *N_value2, float *V_value2, struct Paquete *value3) {
     pthread_mutex_lock(&candado);
     
@@ -102,12 +107,13 @@ int get_value(char *key, char *value1, int *N_value2, float *V_value2, struct Pa
     while (actual != NULL) {
         if (strcmp(actual->key, key) == 0) { // clave encontrada
             // copiar datos al output
+            // 1er param: donde copiar, 2do param: qué copiar, 3ro: tam máx copiar (evitar overflow)
             strncpy(value1, actual->value1, 256);
             *N_value2 = actual->N_value2;
             for (int i = 0; i < actual->N_value2; i++) {
                 V_value2[i] = actual->value2[i]; // copiar valores del vector
             }
-            *value3 = actual->value3; // copiar estructura Paquete
+            *value3 = actual->value3; // copiar dir estructura Paquete
             
             pthread_mutex_unlock(&candado);
             return 0; // éxito
@@ -130,14 +136,15 @@ struct Paquete value3) {
     struct claves *actual = head;
     while (actual != NULL) {
         if (strcmp(actual->key, key) == 0) {// Pedir la memoria nueva usando un puntero temporal
-            float *nuevo_vector = (float *)malloc(N_value2 * sizeof(float));
-            if (nuevo_vector == NULL) {
+            // Crear puntero a decimal, poner valor de dir de mem reservada para dicho decimal
+            float *nuevo_vector = (float *)malloc(N_value2 * sizeof(float)); // puntero al PRIMER elem del vector
+            if (nuevo_vector == NULL) { // Sale NULL si no se encuentra mem suficiente
                 // Si falla, se sale sin haber roto la tupla original
                 pthread_mutex_unlock(&candado);
                 return -1; 
             }
-            
-            // Si sí hay mem, copiamos los números nuevos
+            // SÍ hay mem
+            // Copiamos los números nuevos
             for (int i = 0; i < N_value2; i++) {
                 nuevo_vector[i] = V_value2[i]; 
             }
@@ -147,7 +154,8 @@ struct Paquete value3) {
             
             // Conectar nuevo vector, actualizar textos y números simples
             actual->value2 = nuevo_vector;
-            strncpy(actual->value1, value1, 255);
+            // longitud de 256 para value1
+            strncpy(actual->value1, value1, 255); // 255 porque el 256 es para el \0 al final
             actual->value1[255] = '\0';
             actual->N_value2 = N_value2;
             actual->value3 = value3; 
@@ -171,7 +179,7 @@ int delete_key(char *key) {
     while (actual != NULL) {
         if (strcmp(actual->key, key) == 0) { // clave encontrada
             // eliminar el nodo actual
-            if (anterior == NULL) { // el nodo a eliminar es el head
+            if (anterior == NULL) { // si el nodo a eliminar es el head
                 head = actual->siguiente; // actualizar head
             } else {
                 anterior->siguiente = actual->siguiente; // saltar el nodo actual
